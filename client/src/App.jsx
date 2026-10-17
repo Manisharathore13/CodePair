@@ -1,4 +1,3 @@
-
 import { useEffect, useRef, useState } from "react";
 import "./App.css";
 import Editor from "@monaco-editor/react";
@@ -50,10 +49,17 @@ function App() {
   const [runError, setRunError] = useState("");
   const [runStatus, setRunStatus] = useState("");
   const [isRunning, setIsRunning] = useState(false);
+
+  // Submission History states
+  const [submissions, setSubmissions] = useState([]);
+  const [isHistoryLoading, setIsHistoryLoading] = useState(false);
+  const [historyMessage, setHistoryMessage] = useState("");
+
   const [isJoining, setIsJoining] = useState(false);
 
   const socketRef = useRef(null);
 
+  // Logout
   function handleLogout() {
     localStorage.removeItem("codepair_token");
     localStorage.removeItem("codepair_user");
@@ -65,11 +71,14 @@ function App() {
     setIsAuthenticated(false);
     setActiveRoom(null);
     setRooms([]);
+    setSubmissions([]);
+    setHistoryMessage("");
     setMessage("Please log in to continue.");
     setAuthPassword("");
     setAuthMode("login");
   }
 
+  // Login and Signup
   async function handleAuthSubmit(event) {
     event.preventDefault();
     setMessage("");
@@ -113,6 +122,7 @@ function App() {
         setCurrentUser(data.user);
         setRooms([]);
         setActiveRoom(null);
+        setSubmissions([]);
         setIsAuthenticated(true);
         setAuthPassword("");
         setMessage(`Welcome, ${data.user.name}!`);
@@ -145,7 +155,7 @@ function App() {
       });
   }, []);
 
-  // Load rooms after login and whenever authentication changes
+  // Load rooms after login
   useEffect(() => {
     if (!isAuthenticated) {
       setRooms([]);
@@ -188,7 +198,7 @@ function App() {
     };
   }, [isAuthenticated]);
 
-  // Connect to Socket.IO with JWT when a room is opened
+  // Socket.IO connection for live collaboration
   useEffect(() => {
     if (!isAuthenticated || !activeRoom) return;
 
@@ -264,13 +274,14 @@ function App() {
     };
   }, [activeRoom, isAuthenticated]);
 
+  // Open a room
   function openRoom(room) {
     setCode("// Start coding here...\n");
     setActiveRoom(room);
     setMessage(`Opening ${room.name}...`);
   }
 
-  // Create room — authentication required
+  // Create room
   async function createRoom(event) {
     event.preventDefault();
 
@@ -314,7 +325,7 @@ function App() {
     }
   }
 
-  // Find and join a room — authentication required
+  // Join room
   async function joinRoom(event) {
     event.preventDefault();
 
@@ -374,6 +385,7 @@ function App() {
     }
   }
 
+  // Update language and sync with collaborators
   function handleLanguageChange(nextLanguage) {
     setLanguage(nextLanguage);
 
@@ -385,12 +397,13 @@ function App() {
     }
   }
 
-  // Run code using Judge0 backend endpoint
+  // Run code and save submission
   async function handleRunCode() {
     setIsRunning(true);
     setOutput("");
     setRunError("");
     setRunStatus("Running...");
+    setHistoryMessage("");
 
     try {
       const response = await fetch(`${API}/api/run`, {
@@ -411,9 +424,57 @@ function App() {
         throw new Error(data.message || "Code execution failed.");
       }
 
-      setOutput(data.output || "");
-      setRunError(data.error || "");
-      setRunStatus(data.status || "Finished");
+      const resultOutput = data.output || "";
+      const resultError = data.error || "";
+      const resultStatus = data.status || "Finished";
+
+      setOutput(resultOutput);
+      setRunError(resultError);
+      setRunStatus(resultStatus);
+
+      // Save execution result to database
+      try {
+        const saveResponse = await fetch(`${API}/api/submissions`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            ...authHeaders(),
+          },
+          body: JSON.stringify({
+            code,
+            language,
+            input: customInput,
+            output: resultOutput,
+            error: resultError,
+            status: resultStatus,
+            time: data.time ?? null,
+            memory: data.memory ?? null,
+          }),
+        });
+
+        const saveData = await saveResponse.json();
+
+        if (!saveResponse.ok || !saveData.success) {
+          throw new Error(
+            saveData.message || "Could not save submission."
+          );
+        }
+
+        setSubmissions((previous) => [
+          saveData.submission,
+          ...previous.filter(
+            (item) => item.id !== saveData.submission.id
+          ),
+        ]);
+
+        setHistoryMessage("Submission saved successfully.");
+      } catch (saveError) {
+        console.error("Submission history error:", saveError.message);
+
+        setHistoryMessage(
+          `Code ran, but history could not be saved: ${saveError.message}`
+        );
+      }
     } catch (error) {
       setRunError(error.message || "Unable to run code.");
       setRunStatus("Failed");
@@ -422,6 +483,55 @@ function App() {
     }
   }
 
+  // Load saved submission history from database
+  async function loadSubmissions() {
+    setIsHistoryLoading(true);
+    setHistoryMessage("");
+
+    try {
+      const response = await fetch(`${API}/api/submissions`, {
+        headers: authHeaders(),
+      });
+
+      if (response.status === 401) {
+        handleLogout();
+        return;
+      }
+
+      const data = await response.json();
+
+      if (!response.ok || !data.success) {
+        throw new Error(data.message || "Could not load history.");
+      }
+
+      setSubmissions(data.submissions || []);
+
+      setHistoryMessage(
+        data.submissions?.length
+          ? "Submission history loaded."
+          : "No submissions yet. Run your code first."
+      );
+    } catch (error) {
+      setHistoryMessage(error.message || "Could not load history.");
+    } finally {
+      setIsHistoryLoading(false);
+    }
+  }
+
+  // Restore a previous submission in the editor
+  function restoreSubmission(submission) {
+    setCode(submission.code || "");
+    setLanguage(submission.language || "cpp");
+    setCustomInput(submission.input || "");
+    setOutput(submission.output || "");
+    setRunError(submission.error || "");
+    setRunStatus(submission.status || "");
+
+    setMessage("Previous submission restored in the editor.");
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
+  // Copy room code
   async function copyRoomCode(roomId) {
     try {
       await navigator.clipboard.writeText(roomId);
@@ -431,7 +541,7 @@ function App() {
     }
   }
 
-  // Delete room — authentication required
+  // Delete room
   async function deleteRoom(room) {
     const confirmed = window.confirm(
       `Are you sure you want to delete "${room.name}"?`
@@ -473,6 +583,7 @@ function App() {
     }
   }
 
+  // Login and Signup screen
   if (!isAuthenticated) {
     return (
       <div className="auth-screen">
@@ -608,6 +719,7 @@ function App() {
     );
   }
 
+  // Main application
   return (
     <div className="app">
       <header className="navbar">
@@ -637,15 +749,13 @@ function App() {
             {(currentUser?.name || "U").charAt(0).toUpperCase()}
           </div>
 
-         
-<button
-  className="logout-button"
-  type="button"
-  onClick={handleLogout}
->
-  Logout
-</button>
-
+          <button
+            className="logout-button"
+            type="button"
+            onClick={handleLogout}
+          >
+            Logout
+          </button>
         </div>
       </header>
 
@@ -875,6 +985,62 @@ function App() {
               </button>
             </div>
 
+            {/* Submission History */}
+            <section className="history-panel">
+              <div className="output-heading">
+                <h3>Submission History</h3>
+
+                <button
+                  type="button"
+                  className="small-button"
+                  onClick={loadSubmissions}
+                  disabled={isHistoryLoading}
+                >
+                  {isHistoryLoading ? "Loading..." : "Load History"}
+                </button>
+              </div>
+
+              {historyMessage && (
+                <p className="message" role="status">
+                  {historyMessage}
+                </p>
+              )}
+
+              {submissions.length === 0 ? (
+                <p>Run your code to start building your history.</p>
+              ) : (
+                <div className="submission-list">
+                  {submissions.map((submission) => (
+                    <button
+                      type="button"
+                      className="submission-item"
+                      key={submission.id}
+                      onClick={() => restoreSubmission(submission)}
+                    >
+                      <span>
+                        <strong>
+                          {(submission.language || "cpp").toUpperCase()}
+                        </strong>
+                        {" · "}
+                        {submission.status || "Unknown"}
+                      </span>
+
+                      <span>
+                        {submission.created_at
+                          ? new Date(
+                              submission.created_at
+                            ).toLocaleString()
+                          : "Recently saved"}
+                      </span>
+
+                      <span>Click to restore code ↗</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </section>
+
+            {/* Program Output */}
             <section className="output-panel">
               <div className="output-heading">
                 <h3>Output</h3>

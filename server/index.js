@@ -12,6 +12,7 @@ const pool = require("./db");
 const authRoutes = require("./auth");
 const authenticateToken = require("./authMiddleware");
 
+// Initialize Express BEFORE defining routes
 const app = express();
 const server = http.createServer(app);
 
@@ -29,7 +30,7 @@ app.use(express.json({ limit: "1mb" }));
 
 app.use("/api/auth", authRoutes);
 
-// Check server status
+// Health check
 app.get("/api/health", (req, res) => {
   res.json({
     success: true,
@@ -53,6 +54,114 @@ app.get("/api/db-test", async (req, res) => {
     res.status(500).json({
       success: false,
       message: "Database connection failed.",
+    });
+  }
+});
+
+// Save a code submission — login required
+app.post("/api/submissions", authenticateToken, async (req, res) => {
+  try {
+    const {
+      code,
+      language,
+      input = "",
+      output = "",
+      error = "",
+      status = "Unknown",
+      time = null,
+      memory = null,
+    } = req.body || {};
+
+    const allowedLanguages = ["cpp", "java", "python", "javascript"];
+
+    if (typeof code !== "string" || !code.trim()) {
+      return res.status(400).json({
+        success: false,
+        message: "Code is required.",
+      });
+    }
+
+    if (code.length > 20000) {
+      return res.status(400).json({
+        success: false,
+        message: "Code is too long.",
+      });
+    }
+
+    if (!allowedLanguages.includes(language)) {
+      return res.status(400).json({
+        success: false,
+        message: "Unsupported programming language.",
+      });
+    }
+
+    if (
+      typeof input !== "string" ||
+      typeof output !== "string" ||
+      typeof error !== "string"
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid submission data.",
+      });
+    }
+
+    const result = await pool.query(
+      `INSERT INTO submissions
+       (user_id, code, language, input, output, error, status,
+        execution_time, memory)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+       RETURNING *`,
+      [
+        req.user.userId,
+        code,
+        language,
+        input,
+        output,
+        error,
+        String(status).slice(0, 50),
+        time == null ? null : String(time).slice(0, 30),
+        Number.isInteger(memory) && memory >= 0 ? memory : null,
+      ]
+    );
+
+    res.status(201).json({
+      success: true,
+      submission: result.rows[0],
+    });
+  } catch (error) {
+    console.error("Save submission error:", error.message);
+
+    res.status(500).json({
+      success: false,
+      message: "Could not save submission.",
+    });
+  }
+});
+
+// Get logged-in user's recent submissions
+app.get("/api/submissions", authenticateToken, async (req, res) => {
+  try {
+    const result = await pool.query(
+      `SELECT id, code, language, input, output, error, status,
+              execution_time, memory, created_at
+       FROM submissions
+       WHERE user_id = $1
+       ORDER BY created_at DESC, id DESC
+       LIMIT 50`,
+      [req.user.userId]
+    );
+
+    res.json({
+      success: true,
+      submissions: result.rows,
+    });
+  } catch (error) {
+    console.error("Fetch submissions error:", error.message);
+
+    res.status(500).json({
+      success: false,
+      message: "Could not load submission history.",
     });
   }
 });
@@ -285,7 +394,7 @@ app.delete("/api/rooms/:code", authenticateToken, async (req, res) => {
   }
 });
 
-// Socket.IO authentication — valid JWT required
+// Socket.IO authentication
 io.use((socket, next) => {
   if (!process.env.JWT_SECRET) {
     return next(new Error("Authentication is not configured."));
@@ -315,7 +424,7 @@ io.use((socket, next) => {
 io.on("connection", (socket) => {
   console.log("Authenticated user connected:", socket.user.userId);
 
-  // Join a room and receive its saved editor state
+  // Join room and receive saved editor state
   socket.on("join-room", async (roomCode) => {
     if (typeof roomCode !== "string") return;
 
@@ -348,7 +457,7 @@ io.on("connection", (socket) => {
     }
   });
 
-  // Save and broadcast code only for rooms this socket has joined
+  // Save and broadcast code for joined rooms
   socket.on("code-change", async ({ roomCode, code } = {}) => {
     if (typeof roomCode !== "string" || typeof code !== "string") return;
 
@@ -407,3 +516,4 @@ io.on("connection", (socket) => {
 server.listen(PORT, () => {
   console.log(`CodePair server running on port ${PORT}`);
 });
+
