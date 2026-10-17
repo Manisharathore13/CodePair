@@ -1,26 +1,39 @@
-# CodePair — Real-Time Collaborative Code Editor
+﻿# CodePair - Real-Time Collaborative Code Editor
 
 CodePair is a web-based collaborative coding platform where users can create coding rooms, invite teammates using a room code, write code together in real time, and execute programs in supported programming languages.
 
 ## Features
 
-- Create Coding Rooms: Create a room for coding practice and collaborative problem-solving.
-- Join with Room Code: Join an existing room using its unique room code.
-- Real-Time Code Collaboration: Share code changes between users in the same room.
-- Language Synchronization:Synchronize the selected programming language between collaborators.
-- Multi-Language Execution: Run code in C++, Java, Python, and JavaScript.
-- Custom Input: Provide standard input (stdin) to programs.
-- Execution Output: View program output and reported errors.
-- Saved Rooms: Retrieve previously created rooms from the database.
-- Code Editor: Write code using the Monaco Editor.
+- Create and join coding rooms using unique room codes
+- Real-time code collaboration with Socket.IO
+- Synchronize programming languages between collaborators
+- Write code in the Monaco Editor
+- Run code in supported languages: C++, Java, Python, and JavaScript
+- Provide custom standard input (stdin)
+- View execution output and errors
+- Retrieve saved rooms using PostgreSQL
+
+## Screenshots
+
+### Home Page
+![CodePair Home Page](screenshots/home-page.png)
+
+### Code Editor
+![CodePair Editor](screenshots/editor.png)
+
+### Live Collaboration
+![CodePair Live Collaboration](screenshots/collaboration.png)
+
+### Code Execution Output
+![CodePair Code Output](screenshots/code-output.png)
 
 ## Tech Stack
 
-- Frontend: React, Vite, CSS, Monaco Editor
-- Backend: Node.js, Express.js
-- Real-Time Communication: Socket.IO
-- Database: PostgreSQL
-- Code Execution: Judge0 API
+- **Frontend:** React, Vite, CSS, Monaco Editor
+- **Backend:** Node.js, Express.js
+- **Real-Time Communication:** Socket.IO
+- **Database:** PostgreSQL
+- **Code Execution:** Judge0 API
 
 ## Project Structure
 
@@ -28,27 +41,27 @@ CodePair is a web-based collaborative coding platform where users can create cod
 CodePair/
 ├── client/       # React frontend
 ├── server/       # Node.js backend
+├── screenshots/  # Project screenshots
+├── .gitignore
 └── README.md
 ```
 
-## Getting Started
-
-### Prerequisites
-
-Install the following before running the project:
+## Prerequisites
 
 - Node.js and npm
 - PostgreSQL
-- A configured code-execution API connection
+- Code-execution API configuration, if required by the backend
+
+## Getting Started
 
 ### 1. Clone the Repository
 
 ```bash
-git clone <YOUR_GITHUB_REPOSITORY_URL>
+git clone YOUR_GITHUB_REPOSITORY_URL
 cd CodePair
 ```
 
-Replace the placeholder with your actual GitHub repository URL.
+Replace `YOUR_GITHUB_REPOSITORY_URL` with your GitHub repository URL.
 
 ### 2. Set Up the Backend
 
@@ -57,9 +70,9 @@ cd server
 npm install
 ```
 
-Configure the `server/.env` file using the environment variable names required by your existing backend. Add your database connection details and code-execution API configuration.
+Create a `server/.env` file and configure the environment variables required by your backend, including database and code-execution API settings.
 
-**Do not commit API keys, database passwords, or other secrets to GitHub.**
+Never commit `.env` files, API keys, or database passwords.
 
 Start the backend:
 
@@ -69,7 +82,7 @@ node index.js
 
 ### 3. Set Up the Frontend
 
-Open a second terminal from the project root:
+Open another terminal from the project root:
 
 ```bash
 cd client
@@ -77,22 +90,18 @@ npm install
 npm run dev
 ```
 
-Open the local URL displayed by Vite, usually:
-
-```text
-http://localhost:5173/
-```
+Open the local URL shown by Vite, usually `http://localhost:5173/`.
 
 Keep both the frontend and backend running while using the application.
 
 ## How to Use
 
 1. Open CodePair in your browser.
-2. Create a coding room or join an existing room using its room code.
+2. Create a coding room or join one using its room code.
 3. Open the same room in another browser window to test collaboration.
-4. Type code in the editor and verify that changes appear in the other window.
+4. Edit code and check whether changes appear in the other window.
 5. Change the programming language and verify synchronization.
-6. Enter custom input if required and click Run Code.
+6. Enter custom input if required and click **Run Code**.
 7. Check the execution output or reported errors.
 
 ## Future Improvements

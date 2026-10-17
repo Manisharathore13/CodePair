@@ -637,13 +637,15 @@ function App() {
             {(currentUser?.name || "U").charAt(0).toUpperCase()}
           </div>
 
-          <button
-            className="small-button"
-            type="button"
-            onClick={handleLogout}
-          >
-            Logout
-          </button>
+         
+<button
+  className="logout-button"
+  type="button"
+  onClick={handleLogout}
+>
+  Logout
+</button>
+
         </div>
       </header>
 
